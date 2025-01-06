@@ -8,6 +8,7 @@ const config = require('./config/config');
 // Import routes
 const authRoutes = require('./routes/auth.routes');
 const entriesRoutes = require('./routes/entries.routes');
+const chatRoutes = require('./routes/chat.routes');
 
 // Initialize express app
 const app = express();
@@ -27,6 +28,7 @@ mongoose.connect(config.mongoUri)
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/entries', entriesRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health check route
 app.get('/health', (req, res) => {
