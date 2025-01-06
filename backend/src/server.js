@@ -5,6 +5,9 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const config = require('./config/config');
 
+// Import routes
+const authRoutes = require('./routes/auth.routes');
+
 // Initialize express app
 const app = express();
 
@@ -20,10 +23,13 @@ mongoose.connect(config.mongoUri)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Routes (to be implemented)
-// app.use('/api/auth', require('./routes/auth'));
-// app.use('/api/entries', require('./routes/entries'));
-// app.use('/api/chat', require('./routes/chat'));
+// Routes
+app.use('/api/auth', authRoutes);
+
+// Health check route
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date() });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
