@@ -1,4 +1,5 @@
 const Entry = require('../models/entry');
+const voiceService = require('../services/voice.service');
 const AWS = require('aws-sdk');
 const config = require('../config/config');
 
@@ -14,16 +15,38 @@ exports.createEntry = async (req, res) => {
   try {
     const { type, content, mood, tags } = req.body;
     
-    const entry = new Entry({
+    let entryData = {
       user: req.user._id,
       type,
       content,
       mood,
       tags,
       metadata: {}
-    });
+    };
 
+    // If it's a voice entry and has a file
+    if (type === 'voice' && req.file) {
+      try {
+        const { voiceUrl, transcription } = await voiceService.processVoiceMemo(req.file);
+        entryData.content = {
+          voiceUrl,
+          transcription
+        };
+        // Add duration metadata if available
+        if (req.file.duration) {
+          entryData.metadata.duration = req.file.duration;
+        }
+      } catch (error) {
+        return res.status(400).json({
+          error: 'Voice processing failed',
+          details: error.message
+        });
+      }
+    }
+
+    const entry = new Entry(entryData);
     await entry.save();
+
     res.status(201).json({
       message: 'Entry created successfully',
       entry
@@ -31,6 +54,25 @@ exports.createEntry = async (req, res) => {
   } catch (error) {
     res.status(400).json({
       error: 'Failed to create entry',
+      details: error.message
+    });
+  }
+};
+
+// Get upload URL for voice memo
+exports.getUploadUrl = async (req, res) => {
+  try {
+    const { fileName, fileType } = req.body;
+
+    if (!fileName || !fileType) {
+      return res.status(400).json({ error: 'File name and type are required' });
+    }
+
+    const uploadData = await voiceService.getPresignedUrl(fileName, fileType);
+    res.json(uploadData);
+  } catch (error) {
+    res.status(400).json({
+      error: 'Failed to generate upload URL',
       details: error.message
     });
   }
@@ -54,6 +96,14 @@ exports.getEntries = async (req, res) => {
       filter.createdAt = {};
       if (req.query.startDate) filter.createdAt.$gte = new Date(req.query.startDate);
       if (req.query.endDate) filter.createdAt.$lte = new Date(req.query.endDate);
+    }
+
+    // Text search in transcriptions and text content
+    if (req.query.search) {
+      filter.$or = [
+        { 'content.text': { $regex: req.query.search, $options: 'i' } },
+        { 'content.transcription': { $regex: req.query.search, $options: 'i' } }
+      ];
     }
 
     const entries = await Entry.find(filter)
@@ -154,7 +204,7 @@ exports.deleteEntry = async (req, res) => {
       }).promise();
     }
 
-    await entry.remove();
+    await entry.deleteOne();
     res.json({ message: 'Entry deleted successfully' });
   } catch (error) {
     res.status(400).json({
@@ -181,6 +231,9 @@ exports.getStats = async (req, res) => {
           },
           avgWordsPerEntry: { 
             $avg: '$metadata.wordCount'
+          },
+          totalVoiceDuration: {
+            $sum: '$metadata.duration'
           }
         }
       }
@@ -201,7 +254,8 @@ exports.getStats = async (req, res) => {
         totalEntries: 0,
         textEntries: 0,
         voiceEntries: 0,
-        avgWordsPerEntry: 0
+        avgWordsPerEntry: 0,
+        totalVoiceDuration: 0
       },
       moodDistribution: moodDistribution
     });

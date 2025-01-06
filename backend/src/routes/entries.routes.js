@@ -1,13 +1,18 @@
 const express = require('express');
 const entriesController = require('../controllers/entries.controller');
 const auth = require('../middleware/auth');
+const upload = require('../middleware/upload');
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(auth);
 
-// CRUD operations
+// Voice memo specific routes
+router.post('/voice/upload-url', entriesController.getUploadUrl);
+router.post('/voice', upload.single('audio'), entriesController.createEntry);
+
+// Regular CRUD operations
 router.post('/', entriesController.createEntry);
 router.get('/', entriesController.getEntries);
 router.get('/stats', entriesController.getStats);
